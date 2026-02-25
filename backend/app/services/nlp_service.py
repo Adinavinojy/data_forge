@@ -1,0 +1,79 @@
+import re
+from typing import Dict, Any, Optional
+
+def parse_command(command: str) -> Dict[str, Any]:
+    """
+    Parses a natural language command into a pipeline step.
+    Supported commands:
+    - "convert [col] to string/text/number/numeric"
+    - "round [col] to [X] decimal places"
+    - "drop missing/null from [col]"
+    - "fill missing in [col] with [value/mean/mode]"
+    - "drop duplicates"
+    - "delete/drop column [col]"
+    - "uppercase/lowercase [col]"
+    """
+    cmd = command.lower().strip()
+    
+    # 1. Drop Duplicates
+    if "drop duplicates" in cmd or "remove duplicates" in cmd:
+        return {"operation": "drop_duplicates", "params": {"columns": []}}
+
+    # 2. Drop Column
+    drop_col_match = re.search(r"(?:drop|delete|remove) column (.+)", cmd)
+    if drop_col_match:
+        col = drop_col_match.group(1).strip()
+        return {"operation": "drop_columns", "params": {"columns": [col]}}
+
+    # 3. Convert Type
+    convert_match = re.search(r"convert (.+) to (string|text|number|numeric|date|int|float)", cmd)
+    if convert_match:
+        col = convert_match.group(1).strip()
+        target = convert_match.group(2).strip()
+        
+        op_type = "string"
+        if target in ["number", "numeric", "int", "float"]:
+            op_type = "numeric"
+        elif target == "date":
+            op_type = "date"
+            
+        return {"operation": "convert_type", "params": {"columns": [col], "type": op_type}}
+
+    # 4. Round Numeric
+    round_match = re.search(r"round (.+) to (\d+) (?:decimal|places)", cmd)
+    if round_match:
+        col = round_match.group(1).strip()
+        decimals = int(round_match.group(2))
+        return {"operation": "round_numeric", "params": {"columns": [col], "decimals": decimals}}
+
+    # 5. Drop Missing
+    drop_missing_match = re.search(r"(?:drop|remove) (?:missing|null|nan) (?:from|in) (.+)", cmd)
+    if drop_missing_match:
+        col = drop_missing_match.group(1).strip()
+        return {"operation": "drop_missing", "params": {"columns": [col]}}
+
+    # 6. Fill Missing
+    fill_match = re.search(r"fill (?:missing|null|nan) in (.+) with (mean|median|mode|.+)", cmd)
+    if fill_match:
+        col = fill_match.group(1).strip()
+        val = fill_match.group(2).strip()
+        
+        method = "constant"
+        value = val
+        
+        if val in ["mean", "median", "mode"]:
+            method = val
+            value = None
+        
+        return {"operation": "fill_missing", "params": {"columns": [col], "method": method, "value": value}}
+
+    # 7. Text Case
+    case_match = re.search(r"(uppercase|lowercase|titlecase) (.+)", cmd)
+    if case_match:
+        case_type = case_match.group(1).strip()
+        col = case_match.group(2).strip()
+        if case_type == "titlecase": case_type = "title"
+        
+        return {"operation": "text_case", "params": {"columns": [col], "case": case_type}}
+
+    return None
