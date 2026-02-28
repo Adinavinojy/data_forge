@@ -18,15 +18,36 @@ from app.services.pipeline_service import execute_pipeline
 
 router = APIRouter()
 
+@router.delete("/{dataset_id}", response_model=schemas.Dataset)
+def delete_dataset(
+    dataset_id: str,
+    db: Session = Depends(deps.get_db),
+) -> Any:
+    """
+    Delete a dataset and its associated file.
+    """
+    dataset = db.query(models.Dataset).filter(models.Dataset.id == dataset_id).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+        
+    # Delete physical file
+    if os.path.exists(dataset.file_path):
+        try:
+            os.remove(dataset.file_path)
+        except OSError as e:
+            print(f"Error deleting file {dataset.file_path}: {e}")
+            
+    # Delete from DB
+    db.delete(dataset)
+    db.commit()
+    return dataset
+
 @router.post("/upload", response_model=schemas.DatasetUploadResponse)
 def upload_dataset(
     *,
     db: Session = Depends(deps.get_db),
     file: UploadFile = File(...),
 ) -> Any:
-    """
-    Upload a dataset, parse it, and return initial profile and quality alerts.
-    """
     # 1. Validate file extension
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()

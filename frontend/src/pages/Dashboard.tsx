@@ -3,7 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import api from '@/lib/api';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, Database, GitBranch } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, Upload, Database, GitBranch, Trash2 } from 'lucide-react';
 
 interface Dataset {
   id: string;
@@ -20,6 +21,8 @@ export default function Dashboard() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDatasets();
@@ -34,6 +37,26 @@ export default function Dashboard() {
       setError('Failed to fetch datasets');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const confirmDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDatasetToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!datasetToDelete) return;
+    
+    try {
+      await api.delete(`/datasets/${datasetToDelete}`);
+      setDatasets(datasets.filter(d => d.id !== datasetToDelete));
+      setDeleteDialogOpen(false);
+      setDatasetToDelete(null);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to delete dataset');
     }
   };
 
@@ -142,19 +165,46 @@ export default function Dashboard() {
                   </div>
                 </div>
               </CardContent>
-              <CardFooter className="pt-3 border-t border-black/20">
+              <CardFooter className="pt-3 border-t border-black/20 flex gap-2">
                 <Button 
                   variant="secondary" 
-                  className="w-full bg-[#2d2d2d] hover:bg-[#3e3e3e] text-gray-300"
+                  className="flex-1 bg-[#2d2d2d] hover:bg-[#3e3e3e] text-gray-300"
                   onClick={() => navigate(`/datasets/${dataset.id}`)}
                 >
                   Open Workspace
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/30 px-3"
+                  onClick={(e) => confirmDelete(dataset.id, e)}
+                  title="Delete Dataset"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
       )}
+
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="bg-[#1e1e1e] border-black text-gray-300">
+          <DialogHeader>
+            <DialogTitle className="text-gray-100">Delete Dataset</DialogTitle>
+            <DialogDescription className="text-gray-500">
+              Are you sure you want to delete this dataset? This action cannot be undone and the file will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setDeleteDialogOpen(false)} className="bg-transparent border border-gray-600 hover:bg-gray-800 text-gray-300">
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} className="bg-red-900 hover:bg-red-800 text-white">
+              Delete Forever
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

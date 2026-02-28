@@ -60,11 +60,8 @@ def get_or_create_draft_pipeline(db: Session, dataset_id: str) -> models.Pipelin
 
 def execute_preview(dataset: models.Dataset, steps: List[dict], db: Session, limit: int = 100) -> dict:
     try:
-        # Load data (with limit for optimization if no heavy aggregation, 
-        # but for accuracy we should load all, transform, then head. 
-        # Loading all might be slow for large files, but requirements say "Offline", "Pandas".
-        # We'll load full dataset for correctness of operations like "drop_duplicates" or "fill_missing" (mean).
-        
+        # Load data
+        # Note: We must load the dataset completely to run accurate transformations (like fillna(mean))
         if dataset.file_format == "csv":
             df = pd.read_csv(dataset.file_path)
         elif dataset.file_format in ["xlsx", "xls"]:
@@ -74,34 +71,31 @@ def execute_preview(dataset: models.Dataset, steps: List[dict], db: Session, lim
         else:
             raise ValueError("Unsupported file format")
 
-        # Load secondary datasets
+        # Load secondary datasets if needed
         context = load_secondary_datasets(db, steps)
 
-        # Execute Pipeline
+        # Execute Pipeline on full dataset
         df_transformed = execute_pipeline(df, steps, context)
         
-        # Take preview
+        # Determine columns
+        columns = list(df_transformed.columns)
+
+        # Take preview (head)
         df_preview = df_transformed.head(limit)
         
-        # Replace NaN for JSON
-        df_preview = df_preview.where(pd.notnull(df_preview), None)
-        
-        # Convert to list of dicts explicitly to ensure valid JSON structure
-        # df.to_json(orient="records") returns a string, json.loads parses it back to list
-        # We can also use df.to_dict(orient="records") but need to handle non-serializable types (dates, NaNs)
-        
-        # Ensure NaNs are None for JSON compatibility (FastAPI/Pydantic prefers None over NaN)
-        # Pandas replace({np.nan: None}) handles this
-        
-        preview_data = df_preview.replace({np.nan: None}).to_dict(orient="records")
+        # Convert to dict for JSON response (Handle NaNs)
+        # Using where(pd.notnull(df), None) is safer for mixed types than replace({np.nan: None})
+        preview_data = df_preview.where(pd.notnull(df_preview), None).to_dict(orient="records")
 
         return {
             "preview": preview_data,
+            "preview_full_df": df_transformed, # Return full DF for quality checks
             "row_count": len(df_transformed),
             "col_count": len(df_transformed.columns),
-            "columns": list(df_transformed.columns)
+            "columns": columns
         }
     except Exception as e:
+        print(f"Pipeline Execution Error: {e}")
         raise HTTPException(status_code=422, detail=f"Pipeline execution failed: {str(e)}")
 
 # --- Endpoints ---
@@ -280,15 +274,31 @@ def get_interactive_state(
         raise HTTPException(status_code=404, detail="Dataset not found")
     
     pipeline = get_or_create_draft_pipeline(db, dataset_id)
-    steps = json.loads(pipeline.steps)
-# Execute and return preview
+    
+    # Load steps safely
+    if not pipeline.steps:
+        steps = []
+    else:
+        try:
+            steps = json.loads(pipeline.steps)
+        except json.JSONDecodeError:
+            steps = []
+            
+    # Execute pipeline to get current state
     result = execute_preview(dataset, steps, db)
     
-    if result.get("preview"):
-        df_preview = pd.DataFrame(result["preview"])
-        alerts = check_quality_alerts(df_preview)
-    else:
-        alerts = []
+    # Calculate quality alerts on the TRANSFORMED data (always use full dataset)
+    alerts = []
+    
+    # Extract full DataFrame for accurate alert calculation
+    df_full = result.pop("preview_full_df", None)
+    
+    if df_full is not None:
+         try:
+             alerts = check_quality_alerts(df_full)
+         except Exception as e:
+             print(f"Error calculating alerts on full DF: {e}")
+             alerts = []
         
     return {
         "pipeline_id": pipeline.id,
@@ -344,23 +354,17 @@ def execute_command(
     # Execute and return preview
     result = execute_preview(dataset, steps, db)
     
-    # Recalculate alerts based on transformed data (result['preview'])
-    # execute_preview returns a preview list of dicts. We need DataFrame for check_quality_alerts
-    # Ideally we should get the full df from execute_preview or re-run checks
-    # For now, let's run checks on the preview (approximate) or refactor execute_preview to return df
+    # Extract and REMOVE full DF before returning to prevent serialization error
+    df_full = result.pop("preview_full_df", None)
     
-    # Better approach: We need to know if the alerts are resolved.
-    # Let's reconstruct DataFrame from preview for a quick check, or better, 
-    # update execute_preview to return alerts too.
-    
-    # Re-running full pipeline is expensive, but for correctness we should.
-    # Let's use the preview data for alerts to be fast
-    if result.get("preview"):
-        df_preview = pd.DataFrame(result["preview"])
-        alerts = check_quality_alerts(df_preview)
-    else:
-        alerts = []
-
+    # Calculate quality alerts on full dataset
+    alerts = []
+    if df_full is not None:
+         try:
+             alerts = check_quality_alerts(df_full)
+         except Exception:
+             alerts = []
+            
     return {
         "pipeline_id": pipeline.id,
         "steps": steps,
@@ -412,11 +416,16 @@ def add_step(
     # Execute and return preview
     result = execute_preview(dataset, steps, db)
     
-    if result.get("preview"):
-        df_preview = pd.DataFrame(result["preview"])
-        alerts = check_quality_alerts(df_preview)
-    else:
-        alerts = []
+    # Remove non-serializable DataFrame from result
+    df_full = result.pop("preview_full_df", None)
+    
+    # Calculate quality alerts on full dataset (already processed, no need for preview fallback)
+    alerts = []
+    if df_full is not None:
+         try:
+             alerts = check_quality_alerts(df_full)
+         except Exception:
+             alerts = []
         
     return {
         "pipeline_id": pipeline.id,
@@ -457,10 +466,22 @@ def apply_pipeline_to_dataset(
     steps = json.loads(draft.steps)
     result = execute_preview(dataset, steps, db)
     
+    # Remove non-serializable DataFrame
+    df_full = result.pop("preview_full_df", None)
+    
+    # Calculate quality alerts on full dataset
+    alerts = []
+    if df_full is not None:
+         try:
+             alerts = check_quality_alerts(df_full)
+         except Exception:
+             alerts = []
+
     return {
         "pipeline_id": draft.id,
         "steps": steps,
         "message": "Pipeline applied successfully",
+        "quality_alerts": alerts,
         **result
     }
 
@@ -487,14 +508,20 @@ def remove_step(
         db.commit()
     else:
         raise HTTPException(status_code=400, detail="Invalid step index")
+        
     # Execute and return preview
     result = execute_preview(dataset, steps, db)
     
-    if result.get("preview"):
-        df_preview = pd.DataFrame(result["preview"])
-        alerts = check_quality_alerts(df_preview)
-    else:
-        alerts = []
+    # Remove non-serializable DataFrame from result
+    df_full = result.pop("preview_full_df", None)
+    
+    # Calculate quality alerts on full dataset (already processed, no need for preview fallback)
+    alerts = []
+    if df_full is not None:
+         try:
+             alerts = check_quality_alerts(df_full)
+         except Exception:
+             alerts = []
         
     return {
         "pipeline_id": pipeline.id,
@@ -524,12 +551,16 @@ def reset_pipeline(
     # Execute and return preview
     result = execute_preview(dataset, [], db)
     
-    # Reset alerts (original dataset alerts)
-    if result.get("preview"):
-        df_preview = pd.DataFrame(result["preview"])
-        alerts = check_quality_alerts(df_preview)
-    else:
-        alerts = []
+    # Remove non-serializable DataFrame
+    df_full = result.pop("preview_full_df", None)
+    
+    # Calculate alerts on full dataset (original data)
+    alerts = []
+    if df_full is not None:
+        try:
+            alerts = check_quality_alerts(df_full)
+        except Exception:
+            alerts = []
         
     return {
         "pipeline_id": pipeline.id,

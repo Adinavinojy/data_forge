@@ -58,7 +58,7 @@ export default function DatasetDetailsPage() {
       setLoading(true);
       // 1. Fetch Dataset Metadata
       const dsRes = await api.get(`/datasets/${id}`);
-      setDataset(dsRes.data);
+      const datasetData = dsRes.data;
 
       // 2. Fetch Interactive Pipeline State
       const pipeRes = await api.get(`/pipelines/interactive/${id}`);
@@ -66,9 +66,12 @@ export default function DatasetDetailsPage() {
       setPreviewData(pipeRes.data.preview);
       setPreviewColumns(pipeRes.data.columns || []);
       setPipelineId(pipeRes.data.pipeline_id);
-      // We might want to fetch pipeline details to get the name if it was saved before
-      // But interactive endpoint returns pipeline_id. 
-      // We can assume if we fetch interactive state, we are working on that pipeline.
+      
+      // 3. Update dataset with pipeline alerts (this has the current transformed data alerts)
+      setDataset({
+        ...datasetData,
+        quality_alerts: pipeRes.data.quality_alerts || datasetData.quality_alerts
+      });
     } catch (err) {
       console.error("Failed to init workspace", err);
     } finally {
@@ -77,15 +80,20 @@ export default function DatasetDetailsPage() {
   };
 
   const updateState = (res: any) => {
+      console.log("UpdateState called with:", res.data);
+      console.log("Preview data sample:", res.data.preview?.slice(0, 3));
+      console.log("Steps:", res.data.steps);
+      
       setSteps(res.data.steps);
-      setPreviewData(res.data.preview);
+      // Create a new array reference to ensure React re-render
+      setPreviewData([...(res.data.preview || [])]);
       setPreviewColumns(res.data.columns || []);
       
-      // Update quality alerts dynamically
+      // Update quality alerts dynamically - ensure new object reference for React re-render
       if (dataset && res.data.quality_alerts) {
           setDataset({
               ...dataset,
-              quality_alerts: res.data.quality_alerts
+              quality_alerts: [...res.data.quality_alerts]
           });
       }
   };
@@ -94,10 +102,13 @@ export default function DatasetDetailsPage() {
     if (!id) return;
     try {
       setProcessing(true);
+      console.log("Sending API request:", { operation, params });
       const res = await api.post(`/pipelines/interactive/${id}/steps`, {
         operation,
         params
       });
+      console.log("API response received:", res);
+      console.log("API response data:", res.data);
       updateState(res);
     } catch (err: any) {
       console.error("Failed to add step", err);
@@ -115,8 +126,10 @@ export default function DatasetDetailsPage() {
       setProcessing(true);
       const res = await api.delete(`/pipelines/interactive/${id}/steps/${index}`);
       updateState(res);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to remove step", err);
+      const errorMsg = err.response?.data?.detail || err.message || "Undo operation failed";
+      alert(`Error: ${errorMsg}`);
     } finally {
       setProcessing(false);
     }

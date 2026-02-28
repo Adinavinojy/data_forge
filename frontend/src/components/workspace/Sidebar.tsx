@@ -65,6 +65,8 @@ export function Sidebar({ selectedColumn, columnType, onAddStep, currentDatasetI
         { id: 'text_case_title', label: 'To Title Case', requiresColumn: true, validTypes: ['String', 'Text', 'Categorical'], params: { case: 'title' } },
         { id: 'convert_type_numeric', label: 'Convert to Numeric', requiresColumn: true, validTypes: ['All'], params: { type: 'numeric' } },
         { id: 'convert_type_string', label: 'Convert to String', requiresColumn: true, validTypes: ['All'], params: { type: 'string' } },
+        { id: 'convert_type_text_to_numeric', label: 'Mixed → Numbers (20, thirty → 20, 30)', requiresColumn: true, validTypes: ['All'], params: { type: 'text_to_numeric' } },
+        { id: 'convert_type_numeric_to_text', label: 'Mixed → Words (20, thirty → twenty, thirty)', requiresColumn: true, validTypes: ['All'], params: { type: 'numeric_to_text' } },
       ]
     },
     {

@@ -119,33 +119,116 @@ def execute_step(df: pd.DataFrame, step: Dict[str, Any], context: Optional[Dict[
         for col in columns:
             if col in df.columns:
                 if target_type == "numeric":
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                    # More intelligent numeric conversion
+                    def convert_to_numeric(x):
+                        if pd.isnull(x): 
+                            return np.nan
+                        if isinstance(x, (int, float)): 
+                            return x
+                        if isinstance(x, str):
+                            x = x.strip()
+                            # Skip empty strings
+                            if not x:
+                                return np.nan
+                            # Try to convert strings that look like numbers
+                            try:
+                                # Handle commas in numbers (e.g., "1,234.56")
+                                if ',' in x:
+                                    return float(x.replace(',', ''))
+                                # Handle percentages (e.g., "50%")
+                                if x.endswith('%'):
+                                    return float(x.rstrip('%')) / 100
+                                # Handle currency symbols (e.g., "$123.45")
+                                if x.startswith('$') or x.startswith('€') or x.startswith('£'):
+                                    return float(x[1:].replace(',', ''))
+                                # Regular numeric conversion
+                                return float(x)
+                            except ValueError:
+                                # If it can't be converted, keep original string
+                                return x
+                        # For other types, try conversion but keep original if fails
+                        try:
+                            return float(x)
+                        except (ValueError, TypeError):
+                            return x
+                    
+                    df[col] = df[col].apply(convert_to_numeric)
                 elif target_type == "date":
                     df[col] = pd.to_datetime(df[col], errors='coerce')
                 elif target_type == "string":
                     df[col] = df[col].astype(str)
                 elif target_type == "numeric_to_text":
-                    # 1 -> "one"
-                    if pd.api.types.is_numeric_dtype(df[col]):
-                        df[col] = df[col].apply(lambda x: num2words(x) if pd.notnull(x) else x)
-                elif target_type == "text_to_numeric":
-                    # "one" -> 1
-                    # Handle mixed types: if already numeric, keep it. If string, try word_to_num.
-                    def convert_mixed(x):
-                        if pd.isnull(x): return np.nan
-                        if isinstance(x, (int, float)): return x
-                        try:
-                            # Try simple numeric conversion first (e.g. "123")
-                            return float(x)
-                        except ValueError:
-                            pass
-                        try:
-                            # Try word to number (e.g. "one hundred")
-                            return w2n.word_to_num(str(x))
-                        except ValueError:
-                            return np.nan # Or keep original? Request implies conversion to numeric, so NaN if fail.
+                    # 1 -> "one", 30 -> "thirty", handles mixed columns
+                    def convert_mixed_to_text(x):
+                        if pd.isnull(x): 
+                            return x
+                        if isinstance(x, (int, float)): 
+                            try:
+                                result = num2words(int(x)) if x == int(x) else num2words(x)
+                                print(f"Converting numeric {x} to words: {result}")
+                                return result
+                            except Exception as e:
+                                print(f"Error converting {x} to words: {e}")
+                                return str(x)
+                        if isinstance(x, str):
+                            x = x.strip()
+                            if not x:
+                                return x
+                            # First try to convert string to number (handles "88", "25", etc.)
+                            try:
+                                num = float(x)
+                                result = num2words(int(num)) if num == int(num) else num2words(num)
+                                print(f"Converting string number '{x}' to words: {result}")
+                                return result
+                            except ValueError:
+                                pass
+                            # Try word to number to see if it's already words
+                            try:
+                                w2n.word_to_num(x.lower())
+                                # If successful, it's already words, so return as-is
+                                print(f"Keeping existing words: {x}")
+                                return x
+                            except ValueError:
+                                pass
+                            # If can't convert, return original string
+                            print(f"Keeping original string: {x}")
+                            return x
+                        # For other types, convert to string
+                        return str(x)
 
-                    df[col] = df[col].apply(convert_mixed)
+                    print(f"Applying numeric_to_text conversion to column: {col}")
+                    df[col] = df[col].apply(convert_mixed_to_text)
+                    print(f"Conversion completed for column: {col}")
+                elif target_type == "text_to_numeric":
+                    # "one" -> 1, "thirty" -> 30, handles mixed columns
+                    def convert_mixed_to_numeric(x):
+                        if pd.isnull(x): 
+                            return np.nan
+                        if isinstance(x, (int, float)): 
+                            return x
+                        if isinstance(x, str):
+                            x = x.strip().lower()
+                            if not x:
+                                return np.nan
+                            # Try word to number first (e.g., "thirty" -> 30)
+                            try:
+                                return w2n.word_to_num(x)
+                            except ValueError:
+                                pass
+                            # Try simple numeric conversion (e.g., "30" -> 30.0)
+                            try:
+                                return float(x)
+                            except ValueError:
+                                pass
+                            # If can't convert, return original string (or could return np.nan)
+                            return x
+                        # For other types, try conversion
+                        try:
+                            return float(x)
+                        except (ValueError, TypeError):
+                            return x
+
+                    df[col] = df[col].apply(convert_mixed_to_numeric)
 
     elif operation == "round_numeric":
         columns = params.get("columns", [])
