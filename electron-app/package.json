@@ -1,15 +1,14 @@
 {
-  "name": "electron-app",
+  "name": "dataforge",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
+  "description": "DataForge — Automated Multi-Format Data Preprocessing System",
+  "main": "main.js",
+  "author": "Adinavinojy",
   "license": "ISC",
   "type": "commonjs",
+  "scripts": {
+    "start": "electron ."
+  },
   "devDependencies": {
     "electron": "^40.6.1"
   }
