@@ -97,7 +97,9 @@ export default function DatasetDetailsPage() {
       setDataset({
         ...dataset,
         quality_alerts: res.data.quality_alerts ? [...res.data.quality_alerts] : dataset.quality_alerts,
-        columns: res.data.column_schemas ? [...res.data.column_schemas] : dataset.columns
+        columns: res.data.column_schemas ? [...res.data.column_schemas] : dataset.columns,
+        row_count: res.data.row_count !== undefined ? res.data.row_count : dataset.row_count,
+        col_count: res.data.col_count !== undefined ? res.data.col_count : dataset.col_count
       });
     }
   };
@@ -165,9 +167,10 @@ export default function DatasetDetailsPage() {
       if (res.data.added_step) {
         console.log("Executed command:", res.data.added_step);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Command failed", err);
-      alert("Could not understand or execute command");
+      const errorMsg = err.response?.data?.detail || err.message || "Command failed";
+      alert(`Error: ${errorMsg}`);
     } finally {
       setProcessing(false);
     }

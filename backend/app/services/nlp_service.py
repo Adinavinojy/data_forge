@@ -46,14 +46,18 @@ def parse_command(command: str) -> Dict[str, Any]:
         decimals = int(round_match.group(2))
         return {"operation": "round_numeric", "params": {"columns": [col], "decimals": decimals}}
 
-    # 5. Drop Missing
-    drop_missing_match = re.search(r"(?:drop|remove) (?:missing|null|nan) (?:from|in) (.+)", cmd)
+    # 5. Drop Missing — global (no specific column)
+    if re.search(r"(?:drop|remove) (?:all )?(?:missing|null|nan)(?: rows?| values?| data)?$", cmd):
+        return {"operation": "drop_missing", "params": {"columns": []}}
+
+    # 5b. Drop Missing — column-specific
+    drop_missing_match = re.search(r"(?:drop|remove) (?:missing|null|nan)(?: values?)? (?:from|in) (.+)", cmd)
     if drop_missing_match:
         col = drop_missing_match.group(1).strip()
         return {"operation": "drop_missing", "params": {"columns": [col]}}
 
     # 6. Fill Missing
-    fill_match = re.search(r"fill (?:missing|null|nan) in (.+) with (mean|median|mode|.+)", cmd)
+    fill_match = re.search(r"fill (?:missing|null|nan)(?: values?)? in (.+) with (mean|median|mode|.+)", cmd)
     if fill_match:
         col = fill_match.group(1).strip()
         val = fill_match.group(2).strip()
@@ -73,10 +77,17 @@ def parse_command(command: str) -> Dict[str, Any]:
         case_type = case_match.group(1).strip()
         col = case_match.group(2).strip()
         if case_type == "titlecase": case_type = "title"
+        if case_type == "uppercase": case_type = "upper"
+        if case_type == "lowercase": case_type = "lower"
         
         return {"operation": "text_case", "params": {"columns": [col], "case": case_type}}
 
-    # 8. Min-Max Scaling
+    # 8. Standard Scaler — must be checked BEFORE min-max scale to avoid being swallowed
+    if cmd.startswith("standard scale ") or cmd.startswith("zscore "):
+        col = cmd.replace("standard scale ", "").replace("zscore ", "").strip()
+        return {"operation": "standard_scale", "params": {"columns": [col]}}
+
+    # 9. Min-Max Scaling
     scale_match = re.search(r"scale (.+?)(?: between (-?\d+(?:\.\d+)?) and (-?\d+(?:\.\d+)?))?$", cmd)
     if scale_match:
         col = scale_match.group(1).strip()
@@ -101,11 +112,6 @@ def parse_command(command: str) -> Dict[str, Any]:
     if re.search(r"(remove|drop) outliers (from|in) ", cmd):
         col = re.sub(r"^(remove|drop) outliers (from|in) ", "", cmd).strip()
         return {"operation": "remove_outliers_iqr", "params": {"columns": [col], "multiplier": 1.5}}
-
-    # Standard Scaler
-    if cmd.startswith("standard scale ") or cmd.startswith("zscore "):
-        col = cmd.replace("standard scale ", "").replace("zscore ", "").strip()
-        return {"operation": "standard_scale", "params": {"columns": [col]}}
 
     # Date Extraction
     if cmd.startswith("extract date ") or cmd.startswith("parse date "):

@@ -369,18 +369,25 @@ def execute_command(
         params=step_data["params"]
     )
     
-    # Calculate checksum
+    # Calculate checksum — params is MappingProxyType so must convert to dict first
+    # PipelineStep is frozen, so use object.__setattr__ to bypass the constraint (same as add_step)
     import json
     import hashlib
-    step.parameter_checksum = hashlib.sha256(json.dumps(step.params, sort_keys=True).encode()).hexdigest()
+    params_dict = dict(step.params)
+    checksum = hashlib.sha256(json.dumps(params_dict, sort_keys=True).encode()).hexdigest()
+    object.__setattr__(step, 'parameter_checksum', checksum)
+
         
     pipeline = get_or_create_draft_pipeline(db, dataset_id)
     steps = json.loads(pipeline.steps)
     
-    # Add step
+    # Add step — model_dump() may still return MappingProxyType for params, convert to plain dict
     step_dict = step.model_dump()
     step_dict["timestamp"] = step_dict["timestamp"].isoformat()
+    step_dict["params"] = dict(step_dict.get("params") or {})
     steps.append(step_dict)
+
+
     
     # Update pipeline
     pipeline.steps = json.dumps(steps)
