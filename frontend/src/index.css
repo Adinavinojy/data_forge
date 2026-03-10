@@ -45,3 +45,21 @@
     @apply bg-background text-foreground font-sans;
   }
 }
+
+@layer utilities {
+  .electron-draggable {
+    -webkit-user-select: none;
+    -webkit-app-region: drag;
+  }
+  
+  .electron-no-drag,
+  button, 
+  a, 
+  input, 
+  select, 
+  textarea, 
+  [role="button"],
+  [role="dialog"] {
+    -webkit-app-region: no-drag;
+  }
+}

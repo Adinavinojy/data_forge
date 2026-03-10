@@ -1,6 +1,8 @@
 import os
 import uuid
 import json
+import re
+from dateutil import parser
 import pandas as pd
 import numpy as np
 from typing import Tuple, List, Dict, Any
@@ -15,15 +17,96 @@ def detect_encoding(file_path: str) -> str:
     # Basic encoding detection fallback
     return "utf-8"
 
+def parse_json_to_dataframe(data) -> pd.DataFrame:
+    def flatten_data(d, parent_key='', sep='.'):
+        items = []
+        if isinstance(d, dict):
+            for k, v in d.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, (dict, list)):
+                    items.extend(flatten_data(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+        elif isinstance(d, list):
+            for i, v in enumerate(d):
+                new_key = f"{parent_key}{sep}{i}" if parent_key else str(i)
+                if isinstance(v, (dict, list)):
+                    items.extend(flatten_data(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+        else:
+            items.append((parent_key, d))
+        return dict(items)
+
+    if isinstance(data, list):
+        flat_data = [flatten_data(item) for item in data]
+        df = pd.DataFrame(flat_data)
+    elif isinstance(data, dict):
+        df = pd.DataFrame([flatten_data(data)])
+    else:
+        df = pd.DataFrame(data)
+        
+    cols = df.columns.tolist()
+    to_drop = set()
+    for col in cols:
+        if '.' in col:
+            parts = col.split('.')
+            for i in range(1, len(parts)):
+                parent = '.'.join(parts[:i])
+                if parent in cols:
+                    to_drop.add(parent)
+    if to_drop:
+        df = df.drop(columns=list(to_drop))
+
+    return df
+
+def auto_format_date_columns(df: pd.DataFrame) -> pd.DataFrame:
+    date_keywords = ['date', 'time', 'dob', 'created', 'updated', 'stamp', 'history']
+    
+    def try_parse(val):
+        if pd.isna(val) or not isinstance(val, str): return None
+        try:
+            if not re.search(r'[a-zA-Z]{3}|\d{2,4}', val):
+                return None
+            clean_val = re.sub(r'(?i)(Purchased on|Order #[0-9]+ - |Date:|Originally:|On)', '', str(val)).strip()
+            dt = parser.parse(clean_val, fuzzy=True)
+            if 1900 < dt.year < 2100:
+                return dt.strftime('%Y-%m-%d')
+        except Exception:
+            pass
+        return None
+
+    for col in df.columns:
+        if df[col].dtype == 'object' or pd.api.types.is_string_dtype(df[col]):
+            sample = df[col].dropna().head(20)
+            if sample.empty: continue
+                
+            is_date_name = any(kw in col.lower() for kw in date_keywords)
+            parsed_sample = sample.apply(try_parse)
+            valid_pct = parsed_sample.notna().mean()
+            
+            if valid_pct > 0.5 or (is_date_name and valid_pct > 0.2):
+                def parse_and_fallback(val):
+                    parsed = try_parse(val)
+                    return parsed if parsed is not None else val
+                df[col] = df[col].apply(parse_and_fallback)
+    return df
+
 def parse_file(file_path: str, file_format: str, encoding: str = "utf-8") -> pd.DataFrame:
     if file_format == "csv":
-        return pd.read_csv(file_path, encoding=encoding)
+        df = pd.read_csv(file_path, encoding=encoding)
     elif file_format in ["xlsx", "xls"]:
-        return pd.read_excel(file_path)
+        df = pd.read_excel(file_path)
     elif file_format == "json":
-        return pd.read_json(file_path)
+        # Load the raw JSON and flatten it automatically
+        with open(file_path, "r", encoding=encoding) as f:
+            data = json.load(f)
+        df = parse_json_to_dataframe(data)
     else:
         raise ValueError("Unsupported file format")
+        
+    df = auto_format_date_columns(df)
+    return df
 
 def infer_column_type(series: pd.Series) -> str:
     if pd.api.types.is_numeric_dtype(series):
@@ -38,13 +121,21 @@ def infer_column_type(series: pd.Series) -> str:
             sample = series.dropna().head(50)
             if not sample.empty:
                 # Convert to datetime with coerce (invalid strings become NaT)
-                converted = pd.to_datetime(sample, errors='coerce')
-                # If more than 50% of the sample successfully converted to a Date
-                valid_date_count = converted.notna().sum()
-                if valid_date_count >= len(sample) * 0.5 and valid_date_count > 0:
-                    return "Date"
+                # Unhashable objects will become NaT
+                try:
+                    converted = pd.to_datetime(sample, errors='coerce')
+                    valid_date_count = converted.notna().sum()
+                    if valid_date_count >= len(sample) * 0.5 and valid_date_count > 0:
+                        return "Date"
+                except Exception:
+                    pass
                     
-            if series.nunique() < 20:
+            try:
+                unique_count = series.nunique()
+            except TypeError:
+                unique_count = series.astype(str).nunique()
+                
+            if unique_count < 20:
                 return "Categorical"
                 
         return "Text"
@@ -58,7 +149,11 @@ def profile_dataset(df: pd.DataFrame) -> List[schemas.DatasetColumnCreate]:
         null_count = int(series.isnull().sum())
         total_count = len(series)
         null_pct = (null_count / total_count) * 100 if total_count > 0 else 0
-        unique_count = series.nunique()
+        
+        try:
+            unique_count = series.nunique()
+        except TypeError:
+            unique_count = series.astype(str).nunique()
         
         min_val = None
         max_val = None
@@ -69,10 +164,17 @@ def profile_dataset(df: pd.DataFrame) -> List[schemas.DatasetColumnCreate]:
             max_val = str(series.max())
             mean_val = float(series.mean())
         elif col_type == "Date":
-            min_val = str(series.min())
-            max_val = str(series.max())
+            try:
+                min_val = str(series.min())
+                max_val = str(series.max())
+            except Exception:
+                pass
             
-        top_values = series.value_counts().head(5).to_dict()
+        try:
+            top_values = series.value_counts().head(5).to_dict()
+        except TypeError:
+            top_values = series.astype(str).value_counts().head(5).to_dict()
+            
         # Convert keys to string for JSON serialization
         top_values_str = {str(k): int(v) for k, v in top_values.items()}
         
@@ -121,8 +223,7 @@ def check_quality_alerts(df: pd.DataFrame) -> List[Dict[str, Any]]:
             worded_count = 0
             total_valid = 0
             
-            for val in df[col]:
-                if pd.isnull(val): continue
+            for val in df[col].dropna():
                 total_valid += 1
                 
                 # Check numeric
@@ -133,7 +234,7 @@ def check_quality_alerts(df: pd.DataFrame) -> List[Dict[str, Any]]:
                     float(val)
                     numeric_count += 1
                     continue
-                except ValueError:
+                except (ValueError, TypeError):
                     pass
                 
                 # Check worded number
@@ -160,5 +261,70 @@ def check_quality_alerts(df: pd.DataFrame) -> List[Dict[str, Any]]:
                         "missing_pct": 0,
                         "recommended_action": "Convert entire column to Numeric (Text to Numeric)"
                     })
+
+    # 3. Numeric Regex Validation (detect strings like "unknown" in generic numeric columns)
+    import re
+    numeric_pattern = re.compile(r"^\s*-?\d+(\.\d+)?\s*$")
+    numeric_keywords = ['age', 'price', 'amount', 'count', 'total', 'salary', 'score', 'qty', 'quantity']
+    
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            is_numeric_name = any(kw in col.lower() for kw in numeric_keywords)
+            
+            valid_numeric = 0
+            invalid_numeric = 0
+            total_non_null = 0
+            
+            for val in df[col].dropna():
+                total_non_null += 1
+                if isinstance(val, (int, float)):
+                    valid_numeric += 1
+                elif isinstance(val, str) and numeric_pattern.match(str(val)):
+                    valid_numeric += 1
+                else:
+                    invalid_numeric += 1
+                    
+            if total_non_null > 0:
+                if is_numeric_name or (valid_numeric / total_non_null) > 0.5:
+                    if invalid_numeric > 0:
+                        alerts.append({
+                            "entity": col,
+                            "type": "invalid_numeric_format",
+                            "missing_pct": (invalid_numeric / len(df)) * 100,
+                            "recommended_action": "Use validate_format (numeric) to drop invalid rows, or convert_type (numeric)"
+                        })
+
+    # 4. Date Regex Validation
+    date_pattern = re.compile(r"^\s*(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\s*(?:T| )?(?:\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[\+-]\d{2}:\d{2})?)?\s*$")
+    date_keywords = ['date', 'time', 'dob', 'created', 'updated', 'stamp']
+    
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            is_date_name = any(kw in col.lower() for kw in date_keywords)
+            valid_date = 0
+            invalid_date = 0
+            total_non_null = 0
+            
+            for val in df[col].dropna():
+                total_non_null += 1
+                if isinstance(val, str):
+                    if date_pattern.match(str(val)):
+                        valid_date += 1
+                    else:
+                        invalid_date += 1
+                elif hasattr(val, 'year'): # datetime
+                    valid_date += 1
+                else:
+                    invalid_date += 1
+                    
+            if total_non_null > 0:
+                if is_date_name or (valid_date / total_non_null) > 0.5:
+                    if invalid_date > 0 and invalid_date < total_non_null: # Avoid flagging 100% invalid if it's just a normal string col
+                        alerts.append({
+                            "entity": col,
+                            "type": "invalid_date_format",
+                            "missing_pct": (invalid_date / len(df)) * 100,
+                            "recommended_action": "Use validate_format (date) to drop invalid rows, or convert_type (date)"
+                        })
 
     return alerts

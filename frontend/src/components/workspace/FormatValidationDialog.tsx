@@ -53,6 +53,8 @@ export function FormatValidationDialog({ open, onOpenChange, onApply, selectedCo
                                 <SelectItem value="ip_address">IP Address</SelectItem>
                                 <SelectItem value="credit_card">Credit Card Number</SelectItem>
                                 <SelectItem value="aadhaar">Aadhaar Card Number</SelectItem>
+                                <SelectItem value="numeric">Generic Numeric</SelectItem>
+                                <SelectItem value="date">Date (flexible)</SelectItem>
                                 <SelectItem value="custom">Custom Regex Pattern</SelectItem>
                             </SelectContent>
                         </Select>

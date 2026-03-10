@@ -29,12 +29,8 @@ def load_secondary_datasets(db: Session, steps: List[dict]) -> dict:
                 ds = db.query(models.Dataset).filter(models.Dataset.id == sec_id).first()
                 if ds:
                     try:
-                        if ds.file_format == "csv":
-                            context[sec_id] = pd.read_csv(ds.file_path)
-                        elif ds.file_format in ["xlsx", "xls"]:
-                            context[sec_id] = pd.read_excel(ds.file_path)
-                        elif ds.file_format == "json":
-                            context[sec_id] = pd.read_json(ds.file_path)
+                        from app.services.dataset_service import parse_file
+                        context[sec_id] = parse_file(ds.file_path, ds.file_format)
                     except Exception:
                         pass # Fail silently or log? For now silently skip invalid files
     return context
@@ -61,15 +57,9 @@ def get_or_create_draft_pipeline(db: Session, dataset_id: str) -> models.Pipelin
 def execute_preview(dataset: models.Dataset, steps: List[dict], db: Session, limit: int = 100) -> dict:
     try:
         # Load data
-        # Note: We must load the dataset completely to run accurate transformations (like fillna(mean))
-        if dataset.file_format == "csv":
-            df = pd.read_csv(dataset.file_path)
-        elif dataset.file_format in ["xlsx", "xls"]:
-            df = pd.read_excel(dataset.file_path)
-        elif dataset.file_format == "json":
-            df = pd.read_json(dataset.file_path)
-        else:
-            raise ValueError("Unsupported file format")
+        # Load data using unified parser
+        from app.services.dataset_service import parse_file
+        df = parse_file(dataset.file_path, dataset.file_format)
 
         # Load secondary datasets if needed
         context = load_secondary_datasets(db, steps)
@@ -258,14 +248,8 @@ def execute_pipeline_endpoint(
 
     # Load and Execute
     try:
-        if dataset.file_format == "csv":
-            df = pd.read_csv(dataset.file_path)
-        elif dataset.file_format in ["xlsx", "xls"]:
-            df = pd.read_excel(dataset.file_path)
-        elif dataset.file_format == "json":
-            df = pd.read_json(dataset.file_path)
-        else:
-            raise ValueError("Unsupported file format")
+        from app.services.dataset_service import parse_file
+        df = parse_file(dataset.file_path, dataset.file_format)
             
         steps = json.loads(pipeline.steps)
         context = load_secondary_datasets(db, steps)

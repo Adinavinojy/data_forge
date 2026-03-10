@@ -11,7 +11,7 @@ export function WorkspaceLayout({ sidebar, preview, log, header }: WorkspaceLayo
   return (
     <div className="flex flex-col h-screen w-full bg-[#121212] overflow-hidden font-sans text-gray-300">
       {/* Header */}
-      <div className="h-10 border-b border-black flex items-center px-3 shrink-0 bg-[#2d2d2d] z-20 shadow-md">
+      <div className="h-12 border-b border-black flex items-center px-4 pl-20 shrink-0 bg-[#2d2d2d] z-20 shadow-md electron-draggable">
         {header}
       </div>
 

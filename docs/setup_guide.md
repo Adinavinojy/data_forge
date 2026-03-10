@@ -1,84 +1,123 @@
-# 🛠️ DataForge Setup & Launch Guide
+# 🛠️ DataForge — Setup, Launch & User Guide
 
-This guide explains how to set up, run, and package DataForge as a desktop application.
+Everything you need to install, run, and use DataForge.
 
 ---
 
-## 🚀 Quick Launch (Developer Mode)
+## Prerequisites
 
-If you have Python and Node.js installed, you can use the auto-start script.
+- **Python 3.10+**
+- **Node.js 16+** with npm
 
-### 1. Prerequisites
-*   **Python 3.10+**
-*   **Node.js 16+**
+---
 
-### 2. One-Time Setup
-If this is your first time running the project:
+## One-Time Setup
 
 ```bash
-# 1. Backend Setup
+# 1. Create virtual environment and install backend dependencies
 python3 -m venv venv
 source venv/bin/activate
 pip install -r backend/requirements.txt
 
-# 2. Frontend Setup
-cd frontend
-npm install
-cd ..
+# 2. Install frontend dependencies
+cd frontend && npm install && cd ..
 ```
-
-### 3. Launching the App
-Simply run the start script from the root directory:
-
-```bash
-./start_app.sh
-```
-This will:
-1.  Start the FastAPI backend on port 8000.
-2.  Start the React frontend on port 5173.
-3.  Automatically clean up both processes when you press `Ctrl+C`.
 
 ---
 
-## 📦 Packaging as a Desktop App (Electron)
+## Running the App
 
-To distribute DataForge as a standalone `.dmg` (Mac) or `.exe` (Windows) file, follow these steps.
-
-### Step 1: Build the Frontend
-Compile the React app into static files.
+### Option A — Browser Mode
 ```bash
-cd frontend
-npm run build
+./start_app.sh
 ```
-This creates a `dist/` folder containing the UI.
+Opens the backend on port **8000** and frontend on port **5173**.  
+Navigate to `http://localhost:5173` in your browser.
 
-### Step 2: Freeze the Backend
-Use PyInstaller to turn the Python backend into a single executable file.
+### Option B — Desktop App (Electron)
 ```bash
-pip install pyinstaller
-cd backend
-pyinstaller --onefile --name dataforge-backend app/main.py
+cd electron-app
+npm start
 ```
-This creates `dist/dataforge-backend` (Mac/Linux) or `dist/dataforge-backend.exe` (Windows).
+A native window opens automatically. The backend and frontend start in the background — a loading screen is shown while they boot (~5–10 seconds), then the full app loads.  
+Closing the window kills all background processes cleanly.
 
-### Step 3: Create Electron Wrapper
-1.  Initialize a new Electron project in the root:
-    ```bash
-    mkdir electron-app
-    cd electron-app
-    npm init -y
-    npm install electron --save-dev
-    ```
-2.  Copy the frontend build (`frontend/dist`) and backend executable (`backend/dist/dataforge-backend`) into this folder.
-3.  Create an `main.js` file that:
-    *   Spawns the backend process on launch.
-    *   Loads `index.html` from the frontend build.
-    *   Kills the backend process on quit.
+---
 
-### Step 4: Build the Installer
-Use `electron-builder` to create the final installer.
-```bash
-npm install electron-builder --save-dev
-npm run dist
+## The Workspace
+
+The interface has three zones:
+
+| Zone | Location | Purpose |
+|---|---|---|
+| **Control Panel** | Left sidebar | Column selector, statistics, operation buttons |
+| **Data Preview** | Centre | Live scrollable table (first 100 rows). Click a column to select it |
+| **Console & Log** | Bottom | History of applied steps + NLP command input |
+
+---
+
+## Applying Transformations
+
+**Option 1 — Buttons:** Click a column in the preview table → choose an operation from the sidebar.
+
+**Option 2 — NLP Console:** Type a natural language command at the bottom, e.g.:
 ```
-You will now have a professional installer file in `electron-app/dist/`.
+fill age with mean
+scale salary between 0 and 1
+validate email format in contact_col
+remove outliers from age
+```
+See [nlp_commands.md](./nlp_commands.md) for the full command reference.
+
+---
+
+## Column Statistics Panel
+
+When you click a column, a compact stats card appears at the top of the sidebar showing:
+- Detected type, Null count, Null %, Unique count
+- Min / Max / Mean (for numeric columns)
+- Sample values (for text columns)
+
+Stats **automatically refresh** after every operation.
+
+---
+
+## Pipeline Management
+
+| Action | How |
+|---|---|
+| Undo a step | Click `✕` next to the step in the log |
+| Reset all steps | Click **Reset** |
+| Save pipeline | Click **Save Pipeline** in the header |
+| Apply saved pipeline to new dataset | Click **Apply Template** |
+| Export cleaned data | Click **Export CSV** or **Export Excel** |
+
+---
+
+## Quality Alerts
+
+DataForge auto-scans your dataset on load and flags:
+- Columns with high null percentages
+- Columns with mixed types (numbers + text)
+
+Alerts are shown in the header of the workspace.
+
+---
+
+## Data Integrity & Safety
+
+- **Type Safety** — The system blocks operations that would corrupt column types (e.g. filling a numeric column with text).
+- **Replay Consistency** — Pipelines are replayed from the original file, guaranteeing bit-perfect results.
+- **100% Offline** — No data ever leaves your machine.
+
+---
+
+## Troubleshooting
+
+| Issue | Cause | Fix |
+|---|---|---|
+| Loading screen stuck (Electron) | venv or Node not found | Run `./start_app.sh` manually to check errors |
+| "Operation Blocked: Implicit Cast" | Tried to fill numeric col with text | Use Convert Type first, or use a numeric fill value |
+| "No Data Loaded" in preview | Dataset empty or backend error | Click Reset; re-import if corrupted |
+| NLP command not recognised | Phrasing too complex | Use simple keywords: `drop`, `fill`, `scale`, `validate` |
+| Port conflict (8000 / 5173) | Another process using the port | `lsof -ti:8000 \| xargs kill` and `lsof -ti:5173 \| xargs kill` |

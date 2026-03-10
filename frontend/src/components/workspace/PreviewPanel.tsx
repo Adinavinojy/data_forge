@@ -33,6 +33,18 @@ export function PreviewPanel({ data, columns, selectedColumn, onSelectColumn, lo
     );
   }
 
+  const formatCellValue = (val: any) => {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'object') {
+      try {
+        return JSON.stringify(val);
+      } catch (e) {
+        return String(val);
+      }
+    }
+    return String(val);
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-[#1e1e1e] relative h-full w-full">
       <div className="min-w-max h-full">
@@ -70,12 +82,12 @@ export function PreviewPanel({ data, columns, selectedColumn, onSelectColumn, lo
                       "p-1.5 border-r border-black/20 truncate max-w-[200px] text-gray-400 font-mono",
                       selectedColumn === col && "bg-[#094771]/20 text-gray-200"
                     )}
-                    title={String(row[col])}
+                    title={formatCellValue(row[col]) || ""}
                   >
                     {row[col] === null ? (
                       <span className="text-gray-700 italic text-[10px]">null</span>
                     ) : (
-                      String(row[col])
+                      formatCellValue(row[col])
                     )}
                   </td>
                 ))}

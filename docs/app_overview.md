@@ -49,11 +49,18 @@ All data stays on your local machine. Nothing is sent to the cloud.
 ### Frontend
 | Layer | Technology |
 |---|---|
-| **Framework** | React + TypeScript (Next.js / Vite) |
+| **Framework** | React + TypeScript (Vite) |
 | **Styling** | Tailwind CSS |
 | **UI Components** | shadcn/ui (Dialog, Select, Button, Label) |
 | **Icons** | Lucide React |
 | **HTTP Client** | Axios |
+
+### Desktop App
+| Layer | Technology |
+|---|---|
+| **Shell** | Electron v40 |
+| **Process Management** | Node.js `child_process` (spawns FastAPI + Vite) |
+| **Launch** | `cd electron-app && npm start` |
 
 ---
 
@@ -91,7 +98,7 @@ All data stays on your local machine. Nothing is sent to the cloud.
 - **Remove Outliers (IQR)** — Removes rows outside the 1.5×IQR fence
 - **Time-Series Forward Fill / Backward Fill**
 
-### 📊 Column Statistics Panel *(New — being implemented now)*
+### 📊 Column Statistics Panel
 - When a column is selected, a compact statistics table appears in the sidebar showing:
   - Detected Type, Null Count, Null %, Unique Values, Min, Max, Mean
 - Statistics **refresh automatically** after any pipeline step is applied
@@ -135,6 +142,15 @@ FastAPI Backend
                               └── execute_pipeline(df, steps, context)
                                       └── Per-step execute_step(df, op, params)
 ```
+
+---
+
+## Running Modes
+
+| Mode | How to Start | Use When |
+|---|---|---|
+| **Browser** | `./start_app.sh` then open `http://localhost:5173` | Development / remote access |
+| **Desktop App** | `cd electron-app && npm start` | Local desktop use, no browser needed |
 
 ---
 

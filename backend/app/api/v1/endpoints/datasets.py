@@ -64,12 +64,7 @@ def upload_dataset(
     
     # 3. Parse and Profile
     try:
-        if ext == ".csv":
-            df = pd.read_csv(file_path)
-        elif ext in [".xlsx", ".xls"]:
-            df = pd.read_excel(file_path)
-        elif ext == ".json":
-            df = pd.read_json(file_path)
+        df = parse_file(file_path, ext.lstrip("."))
     except Exception as e:
         os.remove(file_path)
         raise HTTPException(status_code=422, detail=f"Could not parse file: {str(e)}")
@@ -103,7 +98,11 @@ def upload_dataset(
         null_count = int(series.isnull().sum())
         total_count = len(series)
         null_pct = (null_count / total_count) * 100 if total_count > 0 else 0.0
-        unique_count = series.nunique()
+        
+        try:
+            unique_count = series.nunique()
+        except TypeError:
+            unique_count = series.astype(str).nunique()
         
         min_val = None
         max_val = None
@@ -115,7 +114,11 @@ def upload_dataset(
              max_val = str(series.max())
              mean_val = float(series.mean())
         
-        top_values = series.value_counts().head(5).to_dict()
+        try:
+            top_values = series.value_counts().head(5).to_dict()
+        except TypeError:
+            top_values = series.astype(str).value_counts().head(5).to_dict()
+            
         top_values_str = {str(k): int(v) for k, v in top_values.items()}
         
         col_obj = models.DatasetColumn(
@@ -174,15 +177,7 @@ def read_dataset(
     
     # Compute quality alerts on the fly
     try:
-        if dataset.file_format == "csv":
-            df = pd.read_csv(dataset.file_path)
-        elif dataset.file_format in ["xlsx", "xls"]:
-            df = pd.read_excel(dataset.file_path)
-        elif dataset.file_format == "json":
-            df = pd.read_json(dataset.file_path)
-        else:
-            df = pd.DataFrame() # Fallback
-            
+        df = parse_file(dataset.file_path, dataset.file_format)
         alerts = check_quality_alerts(df)
     except Exception:
         alerts = []
@@ -214,17 +209,9 @@ def preview_dataset(
         raise HTTPException(status_code=404, detail="Dataset not found")
     
     try:
-        if dataset.file_format == "csv":
-            df = pd.read_csv(dataset.file_path, nrows=limit)
-        elif dataset.file_format in ["xlsx", "xls"]:
-            df = pd.read_excel(dataset.file_path, nrows=limit)
-        elif dataset.file_format == "json":
-            # For JSON, we might need to read all then slice if it's not lines-delimited
-            # But let's try simple read first
-            df = pd.read_json(dataset.file_path)
-            df = df.head(limit)
-        else:
-            raise ValueError("Unsupported file format")
+        # We need the entire dataset parsed correctly to avoid breaking json lists logic
+        df = parse_file(dataset.file_path, dataset.file_format)
+        df = df.head(limit)
             
         # Replace NaN with null for JSON serialization
         df = df.where(pd.notnull(df), None)
@@ -249,14 +236,7 @@ def export_dataset(
 
     try:
         # Load data
-        if dataset.file_format == "csv":
-            df = pd.read_csv(dataset.file_path)
-        elif dataset.file_format in ["xlsx", "xls"]:
-            df = pd.read_excel(dataset.file_path)
-        elif dataset.file_format == "json":
-            df = pd.read_json(dataset.file_path)
-        else:
-            raise ValueError("Unsupported file format")
+        df = parse_file(dataset.file_path, dataset.file_format)
 
         # Execute Pipeline
         pipeline_steps = [step.model_dump() for step in steps]

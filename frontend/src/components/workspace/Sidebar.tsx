@@ -65,7 +65,7 @@ export function Sidebar({ selectedColumn, columnType, onAddStep, currentDatasetI
       icon: Database,
       operations: [
         { id: 'drop_duplicates', label: 'Remove Duplicates', validTypes: ['All'] },
-        { id: 'validate_format', label: 'Format Validation (Email, Links, IP...)', requiresColumn: true, validTypes: ['Text', 'Categorical'], isCustomAction: true },
+        { id: 'validate_format', label: 'Format Validation (Email, Links, IP...)', requiresColumn: true, validTypes: ['Text', 'Categorical', 'Numeric', 'Date'], isCustomAction: true },
         { id: 'drop_missing', label: 'Drop Missing Rows (Any Column)', validTypes: ['All'] },
         { id: 'drop_missing_specific', label: 'Drop Missing Rows (This Column)', requiresColumn: true, validTypes: ['All'] },
         { id: 'fill_missing', label: 'Fill Missing (Mean)', requiresColumn: true, validTypes: ['Numeric'], params: { method: 'mean' } },

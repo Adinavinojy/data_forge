@@ -48,7 +48,7 @@ export default function Dashboard() {
 
   const handleDelete = async () => {
     if (!datasetToDelete) return;
-    
+
     try {
       await api.delete(`/datasets/${datasetToDelete}`);
       setDatasets(datasets.filter(d => d.id !== datasetToDelete));
@@ -83,28 +83,28 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container mx-auto p-8 space-y-8 bg-[#121212] min-h-screen text-gray-300">
+    <div className="container mx-auto p-8 pt-12 space-y-8 bg-[#121212] min-h-screen text-gray-300">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-gray-100">Dashboard</h1>
           <p className="text-gray-500">Manage your datasets and pipelines</p>
         </div>
         <div className="flex gap-3">
-            <Link to="/pipelines">
-                <Button variant="outline" className="bg-[#1e1e1e] border-black/50 text-gray-300 hover:bg-[#2d2d2d] hover:text-white">
-                    <GitBranch className="mr-2 h-4 w-4" /> Saved Pipelines
-                </Button>
-            </Link>
-            <Button onClick={() => document.getElementById('file-upload')?.click()} className="bg-teal-600 hover:bg-teal-700 text-white border-none">
-            <Plus className="mr-2 h-4 w-4" /> New Dataset
+          <Link to="/pipelines">
+            <Button variant="outline" className="bg-[#1e1e1e] border-black/50 text-gray-300 hover:bg-[#2d2d2d] hover:text-white">
+              <GitBranch className="mr-2 h-4 w-4" /> Saved Pipelines
             </Button>
-            <input
+          </Link>
+          <Button onClick={() => document.getElementById('file-upload')?.click()} className="bg-teal-600 hover:bg-teal-700 text-white border-none">
+            <Plus className="mr-2 h-4 w-4" /> New Dataset
+          </Button>
+          <input
             id="file-upload"
             type="file"
             className="hidden"
             accept=".csv,.xlsx,.xls,.json"
             onChange={handleFileUpload}
-            />
+          />
         </div>
       </div>
 
@@ -166,8 +166,8 @@ export default function Dashboard() {
                 </div>
               </CardContent>
               <CardFooter className="pt-3 border-t border-black/20 flex gap-2">
-                <Button 
-                  variant="secondary" 
+                <Button
+                  variant="secondary"
                   className="flex-1 bg-[#2d2d2d] hover:bg-[#3e3e3e] text-gray-300"
                   onClick={() => navigate(`/datasets/${dataset.id}`)}
                 >

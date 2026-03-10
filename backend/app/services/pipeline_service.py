@@ -48,9 +48,18 @@ def execute_step(df: pd.DataFrame, step: Dict[str, Any], context: Optional[Dict[
     if target_columns:
         # Check if columns is a list, if it's None or empty skip
         if isinstance(target_columns, list):
+            # Attempt case-insensitive match for missing columns (helpful for NLP commands)
+            lower_cols = {str(c).lower(): c for c in df.columns}
+            for i, c in enumerate(target_columns):
+                if c not in df.columns and str(c).lower() in lower_cols:
+                    target_columns[i] = lower_cols[str(c).lower()]
+            
             missing_cols = [c for c in target_columns if c not in df.columns]
             if missing_cols:
                  raise ReplayConflictError(f"Columns {missing_cols} missing for operation '{operation}'")
+            
+            # Update params with corrected column names
+            params["columns"] = target_columns
         elif target_columns is None:
             # Some operations might send None for columns if optional
             pass
@@ -109,7 +118,13 @@ def execute_step(df: pd.DataFrame, step: Dict[str, Any], context: Optional[Dict[
     elif operation == "drop_duplicates":
         subset = params.get("columns", None) # Optional subset of columns to check
         if subset == []: subset = None
-        df = df.drop_duplicates(subset=subset)
+        
+        try:
+            df = df.drop_duplicates(subset=subset)
+        except TypeError:
+            cols_to_check = df.columns if subset is None else subset
+            mask = ~df[cols_to_check].astype(str).duplicated()
+            df = df[mask]
 
     elif operation == "text_case":
         columns = params.get("columns", [])
@@ -177,13 +192,13 @@ def execute_step(df: pd.DataFrame, step: Dict[str, Any], context: Optional[Dict[
                                 # Regular numeric conversion
                                 return float(x)
                             except ValueError:
-                                # If it can't be converted, keep original string
-                                return x
+                                # If it can't be converted, replace with null
+                                return np.nan
                         # For other types, try conversion but keep original if fails
                         try:
                             return float(x)
                         except (ValueError, TypeError):
-                            return x
+                            return np.nan
                     
                     df[col] = df[col].apply(convert_to_numeric)
                 elif target_type == "date":
@@ -282,7 +297,9 @@ def execute_step(df: pd.DataFrame, step: Dict[str, Any], context: Optional[Dict[
             "url": r"^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$",
             "ip_address": r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$",
             "credit_card": r"^(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|6(?:011|5[0-9][0-9])[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})$",
-            "aadhaar": r"^[2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4}$",
+            "aadhaar": r"^\s*[2-9]{1}[0-9]{3}[\s-]?[0-9]{4}[\s-]?[0-9]{4}\s*$",
+            "numeric": r"^\s*-?\d+(\.\d+)?\s*$",
+            "date": r"^\s*(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4})\s*(?:T| )?(?:\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[\+-]\d{2}:\d{2})?)?\s*$",
             "custom": params.get("pattern", r".*")
         }
         

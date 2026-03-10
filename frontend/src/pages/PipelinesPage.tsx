@@ -74,30 +74,30 @@ export default function PipelinesPage() {
   if (loading) return <div className="p-8 text-center text-muted-foreground">Loading pipelines...</div>;
 
   return (
-    <div className="container mx-auto p-8 space-y-8 bg-[#121212] min-h-screen text-gray-300">
+    <div className="container mx-auto p-8 pt-12 space-y-8 bg-[#121212] min-h-screen text-gray-300">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
-            <Link to="/">
+          <Link to="/">
             <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/10">
-                <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="h-5 w-5" />
             </Button>
-            </Link>
-            <div>
+          </Link>
+          <div>
             <h1 className="text-2xl font-bold text-gray-100">Saved Pipelines</h1>
             <p className="text-sm text-gray-500">Resume your work or run existing pipelines</p>
-            </div>
+          </div>
         </div>
         <div>
-             <Button onClick={() => document.getElementById('pipeline-upload')?.click()} variant="outline" className="bg-[#1e1e1e] border-black/50 text-gray-300 hover:bg-[#2d2d2d] hover:text-white">
-                <Upload className="mr-2 h-4 w-4" /> Import Template
-            </Button>
-            <input
-                id="pipeline-upload"
-                type="file"
-                className="hidden"
-                accept=".json"
-                onChange={handleImport}
-            />
+          <Button onClick={() => document.getElementById('pipeline-upload')?.click()} variant="outline" className="bg-[#1e1e1e] border-black/50 text-gray-300 hover:bg-[#2d2d2d] hover:text-white">
+            <Upload className="mr-2 h-4 w-4" /> Import Template
+          </Button>
+          <input
+            id="pipeline-upload"
+            type="file"
+            className="hidden"
+            accept=".json"
+            onChange={handleImport}
+          />
         </div>
       </div>
 
@@ -123,32 +123,32 @@ export default function PipelinesPage() {
                   </div>
                   {pipeline.dataset_id && (
                     <div className="flex items-center gap-2">
-                        <Edit className="h-3 w-3" />
-                        Dataset: {pipeline.dataset_id.substring(0, 8)}...
+                      <Edit className="h-3 w-3" />
+                      Dataset: {pipeline.dataset_id.substring(0, 8)}...
                     </div>
                   )}
                   {!pipeline.dataset_id && (
-                     <div className="flex items-center gap-2 text-teal-400">
-                        <Upload className="h-3 w-3" />
-                        Template (Unattached)
+                    <div className="flex items-center gap-2 text-teal-400">
+                      <Upload className="h-3 w-3" />
+                      Template (Unattached)
                     </div>
                   )}
                 </div>
               </CardContent>
               <CardFooter className="flex gap-2 border-t border-black/20 pt-4">
                 {pipeline.dataset_id ? (
-                    <Link to={`/datasets/${pipeline.dataset_id}`} className="flex-1">
+                  <Link to={`/datasets/${pipeline.dataset_id}`} className="flex-1">
                     <Button variant="secondary" className="w-full bg-[#2d2d2d] hover:bg-[#3e3e3e] text-gray-300">
-                        <Play className="mr-2 h-3 w-3" /> Resume
+                      <Play className="mr-2 h-3 w-3" /> Resume
                     </Button>
-                    </Link>
+                  </Link>
                 ) : (
-                    <Button disabled variant="secondary" className="flex-1 bg-[#2d2d2d] text-gray-500 cursor-not-allowed">
-                        Apply in Workspace
-                    </Button>
+                  <Button disabled variant="secondary" className="flex-1 bg-[#2d2d2d] text-gray-500 cursor-not-allowed">
+                    Apply in Workspace
+                  </Button>
                 )}
                 <Button variant="outline" size="icon" onClick={() => handleExport(pipeline)} className="bg-[#1e1e1e] border-black/50 text-gray-400 hover:text-white">
-                    <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4" />
                 </Button>
               </CardFooter>
             </Card>
