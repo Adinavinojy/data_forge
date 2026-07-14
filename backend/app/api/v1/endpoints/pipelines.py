@@ -10,7 +10,7 @@ from app import models, schemas
 from app.api.v1 import deps
 from app.services.pipeline_service import execute_pipeline
 from app.services.dataset_service import check_quality_alerts
-from app.services.nlp_service import parse_command
+from app.services.nlp_service import parse_command, is_help_query
 
 router = APIRouter()
 
@@ -355,6 +355,11 @@ def execute_command(
         raise HTTPException(status_code=404, detail="Dataset not found")
         
     cmd_text = command.get("text", "")
+    if is_help_query(cmd_text):
+        raise HTTPException(
+            status_code=400,
+            detail="This is the NLP command box. Try commands like: 'drop duplicates', 'fill age with mean', or 'convert city to string'.",
+        )
     step_data = parse_command(cmd_text)
     
     if not step_data:
