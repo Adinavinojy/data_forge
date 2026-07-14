@@ -7,6 +7,14 @@ def _strip_articles(text: str) -> str:
     return re.sub(r'^(the|a|an)\s+', '', text.strip())
 
 
+def is_help_query(command: str) -> bool:
+    """
+    Return True for generic "what is this?" style prompts often typed in the NLP box.
+    """
+    c = command.strip().lower()
+    return bool(re.fullmatch(r'(?:what|wht)\s+is\s+this[?.!]*', c))
+
+
 def parse_command(command: str) -> Optional[Dict[str, Any]]:
     """
     Parse a natural language command string into a pipeline step dict.
